@@ -1,11 +1,15 @@
 package main
 
 import (
+	"ether/api"
+	"ether/bot"
 	"ether/database"
 	"ether/tables"
-	"github.com/ethereum/go-ethereum/common"
+	"ether/transaction"
+	"fmt"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/joho/godotenv"
+	tele "gopkg.in/telebot.v3"
 	"log"
 	"math/big"
 	"os"
@@ -38,15 +42,46 @@ func main() {
 		log.Fatal(err)
 	}
 
-	trackingEvent := TrackingEvent{
-		wallet:   common.HexToAddress(os.Getenv("WALLET_ADDRESS")),
-		contract: common.HexToAddress(os.Getenv("CONTRACT_ADDRESS")),
+	bot, err := bot.NewBot(os.Getenv("BOT_TOKEN"))
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	trackingEvent.GetEventFromBlockNumber(db, client, big.NewInt(fromBlock))
+	apiGin := api.NewGin(db)
 
-	//trackingTx := TrackingTransaction{
-	//	address: os.Getenv("WALLET_ADDRESS"),
-	//}
-	//trackingTx.GetTransactionFromBlockNumber(db, client, big.NewInt(fromBlock))
+	messageTx := make(chan string)
+
+	trackingTx, err := transaction.NewTxTracking(os.Getenv("WALLET_ADDRESS"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	go apiGin.Run()
+	go func() {
+		err = bot.Handler()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	go trackingTx.GetTransactionFromBlockNumber(db, client, big.NewInt(fromBlock), messageTx)
+
+	for {
+		select {
+		case msg := <-messageTx:
+			err = SendMsgToUsers(bot, bot.GetTxUserList(), msg)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+}
+
+func SendMsgToUsers(bot *bot.Bot, users []*tele.User, msg string) error {
+	for _, user := range users {
+		err := bot.Send(user, msg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

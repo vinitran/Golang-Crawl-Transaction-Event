@@ -22,6 +22,7 @@ func ConnectDatabase() (*bun.DB, error) {
 		pgdriver.WithDSN(dsn),
 		pgdriver.WithPassword(password),
 	))
+
 	db := bun.NewDB(sqldb, pgdialect.New())
 	fmt.Println("connected to database")
 
